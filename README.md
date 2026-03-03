@@ -14,7 +14,7 @@ Mobile dashboard and admin panel for [Antigravity IDE](https://antigravity.googl
 
 ## Features
 
-**Mobile Dashboard** — Real-time chat streaming, file browser with syntax highlighting, model quota monitor, and quick commands. Available in full and [lite mode](/minimal) for low-bandwidth use.
+**Mobile Dashboard** — Real-time chat streaming, file browser with syntax highlighting, model quota monitor, and quick commands. Available in full and lite mode for low-bandwidth use.
 
 **Admin Panel** (`/admin`) — Localhost-only control panel with:
 - Telegram bot notifications (completion, input needed, errors)
