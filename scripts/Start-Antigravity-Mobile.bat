@@ -3,7 +3,7 @@ title Antigravity Mobile
 :: Antigravity Mobile Launcher - Windows
 :: Double-click this file to start everything
 
-cd /d "%~dp0"
+cd /d "%~dp0\.."
 
 echo.
 echo ==========================================
@@ -119,5 +119,5 @@ echo Continuing without authentication...
 echo.
 
 :startserver
-node launcher.mjs
+node src\launcher.mjs
 pause

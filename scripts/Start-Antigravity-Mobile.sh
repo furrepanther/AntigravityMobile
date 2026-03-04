@@ -2,7 +2,7 @@
 # Antigravity Mobile Launcher - macOS/Linux
 # Make executable: chmod +x Start-Antigravity-Mobile.sh
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 echo ""
 echo "=========================================="
@@ -123,4 +123,4 @@ echo ""
 echo "Starting server..."
 echo ""
 
-node launcher.mjs
+node src/launcher.mjs

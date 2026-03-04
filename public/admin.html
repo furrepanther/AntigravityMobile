@@ -698,6 +698,16 @@
                     </svg>
                     <span>Analytics</span>
                 </a>
+                <a class="sidebar-link" onclick="switchPage('supervisor', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M12 2a9 9 0 0 0-9 9c0 3.88 2.46 7.18 5.9 8.44.13-.95.5-2.06 1.1-2.94a5 5 0 0 1 4-8.5 5 5 0 0 1 4 8.5c.6.88.97 1.99 1.1 2.94A9.01 9.01 0 0 0 21 11a9 9 0 0 0-9-9z">
+                        </path>
+                        <path d="M12 18v4"></path>
+                        <circle cx="12" cy="11" r="2"></circle>
+                    </svg>
+                    <span>Supervisor</span>
+                </a>
                 <div class="sidebar-section-title">Links</div>
                 <a class="sidebar-link" href="/" target="_blank">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1233,6 +1243,156 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="card" style="margin-top:16px;">
+                    <div class="card-inner">
+                        <div class="form-group" style="display:flex;align-items:center;justify-content:space-between;">
+                            <div>
+                                <label class="form-label" style="margin-bottom:4px;">Show Assist Tab</label>
+                                <span class="form-hint">Show the Supervisor Assist tab in the mobile dashboard
+                                    sidebar/topbar</span>
+                            </div>
+                            <div style="position:relative;width:48px;height:26px;cursor:pointer;flex-shrink:0;">
+                                <input type="checkbox" id="showAssistTab" style="display:none;">
+                                <div id="assistTabTrack"
+                                    style="position:absolute;inset:0;border-radius:13px;background:#4b5563;transition:background .2s;border:1px solid rgba(255,255,255,0.15);"
+                                    onclick="document.getElementById('showAssistTab').checked=!document.getElementById('showAssistTab').checked;updateCustomizeVisuals();scheduleCustomizeSave();">
+                                </div>
+                                <div id="assistTabKnob"
+                                    style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;transform:translateX(0);pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== PAGE: Supervisor ==================== -->
+            <div class="page" data-page="supervisor">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title" style="display:flex;align-items:center;gap:8px;"><span
+                                id="supervisorTitleIcon"></span> Supervisor</div>
+                        <div class="page-subtitle">Ollama-powered autonomous agent overseer</div>
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn btn-secondary" onclick="loadSupervisorStatus()">Refresh</button>
+                        <button class="btn btn-primary" onclick="saveSupervisor()">Save</button>
+                    </div>
+                </div>
+
+                <!-- Status -->
+                <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="stat-card">
+                        <div class="stat-value" id="supervisorStatEnabled">—</div>
+                        <div class="stat-label">Status</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="supervisorStatOllama">—</div>
+                        <div class="stat-label">Ollama</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="supervisorStatActions">—</div>
+                        <div class="stat-label">Actions/min</div>
+                    </div>
+                </div>
+
+                <!-- Toggle + Provider -->
+                <div class="card">
+                    <div class="card-inner">
+                        <div class="toggle-row" style="padding-top: 0;">
+                            <div>
+                                <div class="toggle-label">Enable Supervisor</div>
+                                <div class="toggle-desc">Monitor the agent and take autonomous actions via Ollama</div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="supervisorEnabled" onchange="toggleSupervisor()">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <div>
+                                <div class="toggle-label">Disable IDE Injects</div>
+                                <div class="toggle-desc">Keep supervisor monitoring but block it from typing or clicking
+                                    in the IDE</div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="supervisorDisableInjects"
+                                    onchange="toggleSupervisorInjects()">
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div style="margin-top: 16px;">
+                            <div class="form-group">
+                                <label class="form-label">Provider</label>
+                                <select class="select" id="supervisorProvider" style="width: 200px;">
+                                    <option value="ollama" selected>Ollama (Local)</option>
+                                </select>
+                                <span class="form-hint">More providers coming soon</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Endpoint URL</label>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input class="input" type="text" id="supervisorEndpoint"
+                                        placeholder="http://localhost:11434" style="flex:1;">
+                                    <button class="btn btn-secondary btn-sm"
+                                        onclick="testOllamaConnection()">Test</button>
+                                </div>
+                                <span class="form-hint" id="ollamaTestResult"></span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Model</label>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input class="input" type="text" id="supervisorModel" placeholder="llama3"
+                                        style="flex:1;">
+                                    <span class="form-hint" id="ollamaModelHint"
+                                        style="margin:0;white-space:nowrap;"></span>
+                                </div>
+                                <span class="form-hint">Enter the Ollama model name (e.g. llama3, mistral,
+                                    codellama)</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Max Actions/Minute</label>
+                                <input class="input" type="number" id="supervisorRateLimit" min="1" max="60" value="10"
+                                    style="width: 120px;">
+                                <span class="form-hint">Rate limit to prevent runaway loops</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Context -->
+                <div class="card">
+                    <div class="card-inner">
+                        <div class="section-title">Project Context (Optional)</div>
+                        <div class="form-group">
+                            <textarea class="input" id="supervisorContext" rows="5"
+                                placeholder="Describe your project, goals, and any special instructions for the supervisor..."
+                                style="resize: vertical; min-height: 100px;"></textarea>
+                            <span class="form-hint">This context is included in every supervisor decision. E.g.
+                                &quot;We're building a React app. Don't accept any destructive commands. Alert me for
+                                any database changes.&quot;</span>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="saveSupervisorContext()">Save Context</button>
+                    </div>
+                </div>
+
+                <!-- Action Log -->
+                <div class="card">
+                    <div class="card-inner">
+                        <div class="section-title"
+                            style="display:flex;justify-content:space-between;align-items:center;">
+                            <span>Action Log</span>
+                            <div class="btn-row">
+                                <button class="btn btn-secondary btn-sm" onclick="clearSupervisorHistory()">Clear
+                                    History</button>
+                                <button class="btn btn-secondary btn-sm" onclick="loadSupervisorLogs()">Refresh</button>
+                            </div>
+                        </div>
+                        <div id="supervisorLogContainer" style="max-height: 400px; overflow-y: auto; font-size: 13px;">
+                            No actions yet</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Remote Access Page -->
@@ -1420,6 +1580,14 @@
             monitor: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
             lock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
             unlock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
+            brain: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
+            syringe: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2l4 4-3 3-4-4"/><path d="M14.5 6.5L5 16l-3 3 3 3 3-3 9.5-9.5"/><path d="M9 11l4 4"/></svg>',
+            pointer: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/></svg>',
+            megaphone: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>',
+            eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+            question: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+            checkCircle: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+            xCircle: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
         };
         function svgIcon(name, size) {
             const svg = SVG_ICONS[name] || SVG_ICONS.info;
@@ -1516,6 +1684,8 @@
                 // Sync customize settings
                 const mobileUI = c.mobileUI || {};
                 document.getElementById('showQuickActions').checked = mobileUI.showQuickActions !== false;
+                const supervisorCfg = c.supervisor || {};
+                document.getElementById('showAssistTab').checked = supervisorCfg.showAssistTab || false;
                 selectedNavMode = mobileUI.navigationMode || 'sidebar';
                 updateCustomizeVisuals();
 
@@ -1554,6 +1724,13 @@
             if (qaKnob) qaKnob.style.transform = qaChecked ? 'translateX(22px)' : 'translateX(0)';
             if (qaTrack) qaTrack.style.background = qaChecked ? '#3b82f6' : '#4b5563';
 
+            // Assist tab toggle
+            const atChecked = document.getElementById('showAssistTab')?.checked;
+            const atKnob = document.getElementById('assistTabKnob');
+            const atTrack = document.getElementById('assistTabTrack');
+            if (atKnob) atKnob.style.transform = atChecked ? 'translateX(22px)' : 'translateX(0)';
+            if (atTrack) atTrack.style.background = atChecked ? '#3b82f6' : '#4b5563';
+
             // Nav mode selector
             const sidebarCard = document.getElementById('navModeSidebar');
             const topbarCard = document.getElementById('navModeTopbar');
@@ -1573,6 +1750,7 @@
             try {
                 const settings = {
                     showQuickActions: document.getElementById('showQuickActions').checked,
+                    showAssistTab: document.getElementById('showAssistTab').checked,
                     navigationMode: selectedNavMode,
                     refreshInterval: parseInt(document.getElementById('refreshInterval').value) || 2000,
                     theme: document.getElementById('dashTheme').value
@@ -1852,7 +2030,7 @@
 
         document.querySelectorAll('input, select').forEach(el => {
             // Exclude customize-page inputs from general auto-save
-            if (el.id === 'showQuickActions') return;
+            if (el.id === 'showQuickActions' || el.id === 'showAssistTab') return;
             el.addEventListener('input', scheduleAutoSave);
             el.addEventListener('change', scheduleAutoSave);
         });
@@ -2246,15 +2424,149 @@
             if (pageName === 'devices') loadDevices();
             if (pageName === 'commands') loadCommands();
             if (pageName === 'logs') { loadSessions(); syncPauseBtn(); }
-
             if (pageName === 'screenshots') loadScreenshotGallery();
             if (pageName === 'analytics') loadAnalytics();
             if (pageName === 'remote') loadTunnelStatus();
+            if (pageName === 'supervisor') { loadSupervisorStatus(); loadSupervisorLogs(); }
         };
+
+        // ============================================================================
+        // Supervisor functions
+        // ============================================================================
+        async function loadSupervisorStatus() {
+            try {
+                const res = await fetch('/api/admin/supervisor');
+                const data = await res.json();
+                document.getElementById('supervisorEnabled').checked = data.enabled;
+                document.getElementById('supervisorDisableInjects').checked = data.config?.disableInjects || false;
+                document.getElementById('supervisorEndpoint').value = data.config?.endpoint || 'http://localhost:11434';
+                document.getElementById('supervisorModel').value = data.config?.model || 'llama3';
+                document.getElementById('supervisorRateLimit').value = data.config?.maxActionsPerMinute || 10;
+                document.getElementById('supervisorContext').value = data.config?.projectContext || '';
+                document.getElementById('supervisorStatEnabled').textContent = data.enabled ? 'Active' : 'Off';
+                document.getElementById('supervisorStatEnabled').className = 'stat-value ' + (data.enabled ? 'ok' : '');
+                document.getElementById('supervisorStatOllama').textContent = data.ollamaAvailable ? 'Connected' : 'Offline';
+                document.getElementById('supervisorStatOllama').className = 'stat-value ' + (data.ollamaAvailable ? 'ok' : 'err');
+                document.getElementById('supervisorStatActions').textContent = `${data.actionsThisMinute || 0}/${data.maxActionsPerMinute || 10}`;
+                if (data.ollamaModels && data.ollamaModels.length > 0) {
+                    document.getElementById('ollamaModelHint').textContent = `Available: ${data.ollamaModels.slice(0, 5).join(', ')}`;
+                }
+            } catch (e) { showToast('Failed to load supervisor status', 'error'); }
+        }
+
+        async function toggleSupervisor() {
+            try {
+                const res = await fetch('/api/admin/supervisor/toggle', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('supervisorEnabled').checked = data.enabled;
+                showToast(data.enabled ? svgIcon('bot') + ' Supervisor enabled' : svgIcon('pause') + ' Supervisor disabled');
+                loadSupervisorStatus();
+            } catch (e) { showToast('Toggle failed', 'error'); }
+        }
+
+        async function toggleSupervisorInjects() {
+            const disabled = document.getElementById('supervisorDisableInjects').checked;
+            try {
+                await fetch('/api/admin/supervisor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ disableInjects: disabled })
+                });
+                showToast(disabled ? svgIcon('pause') + ' IDE injects disabled' : svgIcon('bot') + ' IDE injects enabled');
+            } catch (e) { showToast('Toggle failed', 'error'); }
+        }
+
+        async function saveSupervisor() {
+            try {
+                const res = await fetch('/api/admin/supervisor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        endpoint: document.getElementById('supervisorEndpoint').value,
+                        model: document.getElementById('supervisorModel').value,
+                        maxActionsPerMinute: document.getElementById('supervisorRateLimit').value,
+                        disableInjects: document.getElementById('supervisorDisableInjects').checked,
+                        projectContext: document.getElementById('supervisorContext').value
+                    })
+                });
+                const data = await res.json();
+                if (data.success) showToast(svgIcon('check') + ' Supervisor config saved');
+                else showToast(data.error || 'Save failed', 'error');
+            } catch (e) { showToast('Save failed', 'error'); }
+        }
+
+        async function saveSupervisorContext() {
+            try {
+                const res = await fetch('/api/admin/supervisor/context', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ context: document.getElementById('supervisorContext').value })
+                });
+                const data = await res.json();
+                if (data.success) showToast(svgIcon('check') + ' Project context saved');
+                else showToast('Save failed', 'error');
+            } catch (e) { showToast('Save failed', 'error'); }
+        }
+
+        async function testOllamaConnection() {
+            const endpoint = document.getElementById('supervisorEndpoint').value;
+            const hint = document.getElementById('ollamaTestResult');
+            hint.textContent = 'Testing...';
+            hint.style.color = 'var(--text-muted)';
+            try {
+                const res = await fetch('/api/admin/supervisor/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint })
+                });
+                const data = await res.json();
+                if (data.available) {
+                    hint.innerHTML = svgIcon('checkCircle') + ' Connected — ' + (data.models?.length || 0) + ' models available';
+                    hint.style.color = 'var(--success)';
+                    if (data.models?.length > 0) {
+                        document.getElementById('ollamaModelHint').textContent = `Available: ${data.models.slice(0, 5).join(', ')}`;
+                    }
+                } else {
+                    hint.innerHTML = svgIcon('xCircle') + ' Failed: ' + (data.error || 'Unknown error');
+                    hint.style.color = 'var(--error)';
+                }
+            } catch (e) {
+                hint.innerHTML = svgIcon('xCircle') + ' Connection failed';
+                hint.style.color = 'var(--error)';
+            }
+        }
+
+        async function loadSupervisorLogs() {
+            try {
+                const res = await fetch('/api/admin/supervisor/logs');
+                const data = await res.json();
+                const container = document.getElementById('supervisorLogContainer');
+                if (!data.actions || data.actions.length === 0) {
+                    container.innerHTML = '<div style="color:var(--text-muted);padding:12px;">No actions recorded yet. Enable the supervisor and it will start logging decisions here.</div>';
+                    return;
+                }
+                container.innerHTML = data.actions.map(a => {
+                    const time = new Date(a.timestamp).toLocaleTimeString();
+                    const icon = a.action === 'inject' ? svgIcon('syringe') : a.action === 'click' ? svgIcon('pointer') : a.action === 'notify' ? svgIcon('megaphone') : a.action === 'config' ? svgIcon('settings') : a.action === 'none' ? svgIcon('eye') : svgIcon('question');
+                    return `<div style="padding:8px 0;border-bottom:1px solid var(--border-subtle);display:flex;gap:8px;align-items:flex-start;"><span style="opacity:.5;font-size:11px;white-space:nowrap;">${time}</span><span>${icon}</span><span style="flex:1;">${a.action}: ${a.detail.length > 80 ? a.detail.slice(0, 80) + '…' : a.detail}</span><span style="font-size:11px;color:var(--text-muted);">${a.result}</span></div>`;
+                }).join('');
+            } catch (e) { /* silent */ }
+        }
+
+        async function clearSupervisorHistory() {
+            try {
+                await fetch('/api/admin/supervisor/clear', { method: 'POST' });
+                showToast(svgIcon('check') + ' Supervisor history cleared');
+                loadSupervisorLogs();
+            } catch (e) { showToast('Failed', 'error'); }
+        }
 
         loadConfigFromServer();
         loadEvents();
         generateQR();
+        // Set supervisor title icon
+        const supTitleIcon = document.getElementById('supervisorTitleIcon');
+        if (supTitleIcon) supTitleIcon.innerHTML = svgIcon('brain', 20);
         setInterval(loadStatus, 10000);
         setInterval(loadEvents, 10000);
     </script>

@@ -27,15 +27,18 @@ import * as QuotaService from './quota-service.mjs';
 import * as Config from './config.mjs';
 import * as TelegramBot from './telegram-bot.mjs';
 import * as Tunnel from './tunnel.mjs';
+import * as Supervisor from './supervisor-service.mjs';
+import * as OllamaClient from './ollama-client.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, '..');
 
 // ============================================================================
 // Live Activity Feed — In-memory event ring buffer + disk session logs
 // ============================================================================
 const MAX_EVENTS = 100;
 const activityEvents = [];
-const LOGS_DIR = join(__dirname, 'data', 'logs');
+const LOGS_DIR = join(PROJECT_ROOT, 'data', 'logs');
 if (!existsSync(LOGS_DIR)) mkdirSync(LOGS_DIR, { recursive: true });
 let loggingPaused = false;
 
@@ -69,7 +72,7 @@ emitEvent('info', 'Server starting...');
 // ============================================================================
 // Usage Analytics
 // ============================================================================
-const ANALYTICS_FILE = join(__dirname, 'data', 'analytics.json');
+const ANALYTICS_FILE = join(PROJECT_ROOT, 'data', 'analytics.json');
 let analytics = { screenshots: 0, errors: 0, commands: 0, uptimeStart: Date.now(), dailyStats: {} };
 try {
     if (existsSync(ANALYTICS_FILE)) analytics = JSON.parse(readFileSync(ANALYTICS_FILE, 'utf-8'));
@@ -93,8 +96,8 @@ function trackMetric(type) {
 // Configuration
 // ============================================================================
 const HTTP_PORT = 3001;
-const DATA_DIR = join(__dirname, 'data');
-const UPLOADS_DIR = join(__dirname, 'uploads');
+const DATA_DIR = join(PROJECT_ROOT, 'data');
+const UPLOADS_DIR = join(PROJECT_ROOT, 'uploads');
 const MESSAGES_FILE = join(DATA_DIR, 'messages.json');
 
 // ============================================================================
@@ -197,7 +200,8 @@ const upload = multer({
 });
 
 // Workspace path (will be set dynamically via IDE detection or default to parent folder)
-let workspacePath = join(__dirname, '..');
+let workspacePath = join(PROJECT_ROOT, '..');
+Supervisor.setProjectRoot(workspacePath);
 let lastValidWorkspacePath = null;  // Track the last successfully detected path
 let workspacePollingActive = false;
 let workspacePollingInterval = null;
@@ -236,6 +240,7 @@ async function startWorkspacePolling() {
             if (!pathEquals(detectedPath, workspacePath)) {
                 const oldPath = workspacePath;
                 workspacePath = detectedPath;
+                Supervisor.setProjectRoot(workspacePath);
                 console.log(`📂 Workspace changed: ${oldPath} → ${workspacePath}`);
 
                 // Broadcast to all connected clients
@@ -274,7 +279,7 @@ function stopWorkspacePolling() {
 // ============================================================================
 // Scheduled Screenshots — auto-capture gallery
 // ============================================================================
-const SCREENSHOTS_DIR = join(__dirname, 'data', 'screenshots');
+const SCREENSHOTS_DIR = join(PROJECT_ROOT, 'data', 'screenshots');
 if (!existsSync(SCREENSHOTS_DIR)) mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 let screenshotInterval = null;
 
@@ -415,7 +420,75 @@ const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(join(__dirname, 'public')));
+
+// ============================================================================
+// Frontend Concatenation — Split source files → single HTML response
+// ============================================================================
+const CSS_ORDER = [
+    'variables.css', 'themes.css', 'layout.css', 'components.css',
+    'chat.css', 'files.css', 'settings.css', 'assist.css'
+];
+const JS_ORDER = [
+    'api.js', 'websocket.js', 'navigation.js', 'chat.js',
+    'settings.js', 'theme.js', 'chat-live.js', 'files.js',
+    'icons.js', 'assist.js', 'task-queue.js', 'app.js'
+];
+
+let cachedInlinedHtml = null;
+
+function buildInlinedHtml() {
+    const publicDir = join(PROJECT_ROOT, 'public');
+    const skeleton = readFileSync(join(publicDir, 'index.html'), 'utf-8');
+
+    // Concatenate CSS
+    let css = '';
+    for (const file of CSS_ORDER) {
+        const path = join(publicDir, 'css', file);
+        if (existsSync(path)) {
+            css += `/* === ${file} === */\n` + readFileSync(path, 'utf-8') + '\n\n';
+        } else {
+            console.warn(`⚠️ CSS file not found: css/${file}`);
+        }
+    }
+
+    // Concatenate JS
+    let js = '';
+    for (const file of JS_ORDER) {
+        const path = join(publicDir, 'js', file);
+        if (existsSync(path)) {
+            js += `// === ${file} ===\n` + readFileSync(path, 'utf-8') + '\n\n';
+        } else {
+            console.warn(`⚠️ JS file not found: js/${file}`);
+        }
+    }
+
+    // Replace placeholders
+    let html = skeleton
+        .replace(/^\s*<!-- CSS -->\s*$/m, `    <style>\n${css}    </style>`)
+        .replace(/^\s*<!-- JS -->\s*$/m, `    <script>\n${js}    </script>`);
+
+    cachedInlinedHtml = html;
+    console.log(`📄 Built inlined HTML: ${CSS_ORDER.length} CSS + ${JS_ORDER.length} JS files → ${Math.round(html.length / 1024)}KB`);
+    return html;
+}
+
+// Build on startup
+buildInlinedHtml();
+
+// Serve the inlined HTML for the root page
+app.get('/', (req, res) => {
+    if (!cachedInlinedHtml) buildInlinedHtml();
+    res.type('html').send(cachedInlinedHtml);
+});
+
+// Dev endpoint: rebuild cached HTML (useful after editing CSS/JS files)
+app.post('/api/admin/rebuild-html', localhostOnly, (req, res) => {
+    buildInlinedHtml();
+    res.json({ success: true, size: cachedInlinedHtml.length });
+});
+
+// Static files (CSS/JS source files, images, manifest, etc.)
+app.use(express.static(join(PROJECT_ROOT, 'public')));
 
 // CORS
 app.use((req, res, next) => {
@@ -536,7 +609,7 @@ function localhostOnly(req, res, next) {
 
 // Serve admin page
 app.get('/admin', localhostOnly, (req, res) => {
-    res.sendFile(join(__dirname, 'public', 'admin.html'));
+    res.sendFile(join(PROJECT_ROOT, 'public', 'admin.html'));
 });
 
 // Get config
@@ -861,8 +934,12 @@ app.post('/api/admin/auto-accept/toggle', localhostOnly, (req, res) => {
 
 // Save mobile UI customization
 app.post('/api/admin/mobile-ui', localhostOnly, (req, res) => {
-    const { showQuickActions, navigationMode, refreshInterval, theme } = req.body;
-    Config.updateConfig('mobileUI', { showQuickActions, navigationMode, refreshInterval, theme });
+    const { showQuickActions, navigationMode, refreshInterval, theme, showAssistTab } = req.body;
+    const settings = { showQuickActions, navigationMode, refreshInterval, theme };
+    if (showAssistTab !== undefined) settings.showAssistTab = showAssistTab;
+    Config.updateConfig('mobileUI', settings);
+    // Keep supervisor.showAssistTab in sync
+    if (showAssistTab !== undefined) Config.updateConfig('supervisor.showAssistTab', showAssistTab);
     // Keep dashboard.theme in sync so both config paths agree
     if (theme) Config.updateConfig('dashboard.theme', theme);
     emitEvent('config', 'Mobile UI settings saved');
@@ -876,7 +953,182 @@ app.get('/api/admin/mobile-ui', (req, res) => {
     if (!mobileUI.theme) {
         mobileUI.theme = Config.getConfig('dashboard.theme') || 'dark';
     }
+    // Include supervisor assist tab state
+    mobileUI.showAssistTab = Config.getConfig('supervisor.showAssistTab') || false;
     res.json(mobileUI);
+});
+
+// ============================================================================
+// Supervisor API Endpoints
+// ============================================================================
+
+// Get supervisor status
+app.get('/api/admin/supervisor', localhostOnly, async (req, res) => {
+    const status = Supervisor.getStatus();
+    const ollamaStatus = await OllamaClient.isAvailable();
+    const config = Config.getConfig('supervisor') || {};
+    res.json({ ...status, ollamaAvailable: ollamaStatus.available, ollamaModels: ollamaStatus.models || [], config });
+});
+
+// Save supervisor config
+app.post('/api/admin/supervisor', localhostOnly, (req, res) => {
+    const { endpoint, model, maxActionsPerMinute, projectContext, disableInjects } = req.body;
+    const updates = {};
+    if (endpoint !== undefined) updates.endpoint = endpoint;
+    if (model !== undefined) updates.model = model;
+    if (maxActionsPerMinute !== undefined) updates.maxActionsPerMinute = parseInt(maxActionsPerMinute) || 10;
+    if (projectContext !== undefined) updates.projectContext = projectContext;
+    if (disableInjects !== undefined) updates.disableInjects = !!disableInjects;
+    const current = Config.getConfig('supervisor') || {};
+    Config.updateConfig('supervisor', { ...current, ...updates });
+    emitEvent('config', 'Supervisor config saved');
+    res.json({ success: true });
+});
+
+// Toggle supervisor on/off
+app.post('/api/admin/supervisor/toggle', localhostOnly, async (req, res) => {
+    const current = Config.getConfig('supervisor.enabled');
+    Config.updateConfig('supervisor.enabled', !current);
+    if (!current) {
+        Supervisor.start();
+    } else {
+        Supervisor.stop();
+    }
+    emitEvent('config', `Supervisor ${!current ? 'enabled' : 'disabled'}`);
+    res.json({ enabled: !current });
+});
+
+// Save project context
+app.post('/api/admin/supervisor/context', localhostOnly, (req, res) => {
+    const { context } = req.body;
+    Config.updateConfig('supervisor.projectContext', context || '');
+    emitEvent('config', 'Supervisor project context updated');
+    res.json({ success: true });
+});
+
+// Get supervisor action log
+app.get('/api/admin/supervisor/logs', localhostOnly, (req, res) => {
+    const limit = parseInt(req.query.limit) || 50;
+    res.json({ actions: Supervisor.getActionLog(limit) });
+});
+
+// Test Ollama connection
+app.post('/api/admin/supervisor/test', localhostOnly, async (req, res) => {
+    const { endpoint: testEndpoint } = req.body;
+    if (testEndpoint) OllamaClient.setEndpoint(testEndpoint);
+    const result = await OllamaClient.isAvailable();
+    // Reset to configured endpoint
+    const configEndpoint = Config.getConfig('supervisor.endpoint') || 'http://localhost:11434';
+    OllamaClient.setEndpoint(configEndpoint);
+    res.json(result);
+});
+
+// Clear supervisor history
+app.post('/api/admin/supervisor/clear', localhostOnly, (req, res) => {
+    Supervisor.clearHistory();
+    res.json({ success: true });
+});
+
+// Supervisor chat — user talks to supervisor conversationally (Assist tab)
+app.post('/api/supervisor/chat', async (req, res) => {
+    const { message } = req.body || {};
+    if (!message || !message.trim()) return res.json({ success: false, error: 'Empty message' });
+    const result = await Supervisor.chatWithUser(message.trim());
+    res.json(result);
+});
+
+// Get supervisor chat history for Assist tab
+app.get('/api/supervisor/chat/history', (req, res) => {
+    res.json({ messages: Supervisor.getUserChatHistory() });
+});
+
+// Streaming supervisor chat via Server-Sent Events
+app.post('/api/supervisor/chat/stream', async (req, res) => {
+    const { message } = req.body || {};
+    if (!message || !message.trim()) {
+        return res.json({ success: false, error: 'Empty message' });
+    }
+
+    // Set SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+    });
+
+    try {
+        const result = await Supervisor.chatWithUserStream(message.trim(), (token) => {
+            res.write(`data: ${JSON.stringify({ token })}\n\n`);
+        });
+
+        if (result.success) {
+            // Process [READ:path] and [LIST:path] tags in the final response
+            const processed = await Supervisor.processFileReads(result.response);
+            const hasFileContent = processed !== result.response;
+
+            res.write(`data: ${JSON.stringify({ done: true, response: result.response })}\n\n`);
+
+            // If file content was resolved, send a follow-up with the processed text
+            if (hasFileContent) {
+                res.write(`data: ${JSON.stringify({ file_content: processed })}\n\n`);
+            }
+        } else {
+            res.write(`data: ${JSON.stringify({ error: result.error })}\n\n`);
+        }
+    } catch (e) {
+        res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+    }
+    res.end();
+});
+
+// ============================================================================
+// Task Queue API (Feature 3)
+// ============================================================================
+
+app.get('/api/supervisor/queue', (req, res) => {
+    res.json({ queue: Supervisor.getTaskQueue() });
+});
+
+app.post('/api/supervisor/queue', (req, res) => {
+    const { instruction } = req.body || {};
+    if (!instruction) return res.json({ success: false, error: 'Missing instruction' });
+    res.json(Supervisor.addTask(instruction));
+});
+
+app.delete('/api/supervisor/queue/:index', (req, res) => {
+    res.json(Supervisor.removeTask(parseInt(req.params.index)));
+});
+
+app.delete('/api/supervisor/queue', (req, res) => {
+    res.json(Supervisor.clearTaskQueue());
+});
+
+// ============================================================================
+// File Awareness API (Feature 4)
+// ============================================================================
+
+app.post('/api/supervisor/file/read', (req, res) => {
+    const { path } = req.body || {};
+    if (!path) return res.json({ success: false, error: 'Missing path' });
+    res.json(Supervisor.readProjectFile(path));
+});
+
+app.post('/api/supervisor/file/list', (req, res) => {
+    const { path } = req.body || {};
+    res.json(Supervisor.listProjectDir(path || ''));
+});
+
+// ============================================================================
+// Session Intelligence API (Feature 5)
+// ============================================================================
+
+app.get('/api/supervisor/sessions', (req, res) => {
+    res.json(Supervisor.getSessionStats());
+});
+
+app.post('/api/supervisor/sessions/save', localhostOnly, (req, res) => {
+    res.json({ success: true, digest: Supervisor.saveSessionDigest() });
 });
 
 // ============================================================================
@@ -1776,6 +2028,20 @@ async function startServer() {
         });
         startScreenshotScheduler();
 
+        // Initialize supervisor
+        Supervisor.registerCallbacks({
+            injectAndSubmit: CDP.injectAndSubmit,
+            clickByXPath: CDP.clickElementByXPath,
+            captureScreenshot: CDP.captureScreenshot,
+            emitEvent,
+            broadcast
+        });
+        const supervisorConfig = Config.getConfig('supervisor') || {};
+        if (supervisorConfig.enabled) {
+            Supervisor.start();
+            emitEvent('supervisor', 'Supervisor auto-started');
+        }
+
         // Auto-start chat stream with retry (CDP may not be ready immediately)
         const startChatStreamWithRetry = async (retries = 30, delayMs = 5000) => {
             for (let i = 0; i < retries; i++) {
@@ -1786,6 +2052,10 @@ async function startServer() {
                             messages: chat.messages,
                             timestamp: new Date().toISOString()
                         });
+                        // Feed chat updates to supervisor
+                        if (chat.html && Supervisor.isEnabled()) {
+                            Supervisor.processChatUpdate(chat.html);
+                        }
                     }, 2000);
                     if (result?.success) {
                         emitEvent('success', 'Chat stream connected');
@@ -1806,7 +2076,7 @@ async function startServer() {
     if (httpsEnabled) {
         try {
             const { generateKeyPairSync, createCertificate } = await import('crypto');
-            const CERTS_DIR = join(__dirname, 'data', 'certs');
+            const CERTS_DIR = join(PROJECT_ROOT, 'data', 'certs');
             if (!existsSync(CERTS_DIR)) mkdirSync(CERTS_DIR, { recursive: true });
             const keyFile = join(CERTS_DIR, 'server.key');
             const certFile = join(CERTS_DIR, 'server.cert');

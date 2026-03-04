@@ -16,10 +16,11 @@
     "vscode",
     "ide"
   ],
-  "main": "http-server.mjs",
+  "main": "src/http-server.mjs",
   "scripts": {
-    "start": "node http-server.mjs",
-    "server": "node http-server.mjs"
+    "start": "node src/http-server.mjs",
+    "server": "node src/http-server.mjs",
+    "launch": "node src/launcher.mjs"
   },
   "dependencies": {
     "express": "^4.18.2",

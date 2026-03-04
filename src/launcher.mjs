@@ -194,7 +194,7 @@ async function main() {
 
         // Use fork for better subprocess handling
         const httpServer = spawn('node', [httpServerPath], {
-            cwd: __dirname,
+            cwd: join(__dirname, '..'),
             stdio: 'ignore',
             detached: true,
             windowsHide: true,

@@ -17,7 +17,7 @@ let lastNotifState = { inputNeeded: false, error: false, dialogError: false };
 let lastHtmlForNotif = '';
 let unchangedCount = 0;
 let agentWasActive = false;
-let lastAutoAcceptXpath = null;
+let recentlyClickedXpaths = new Set();
 let autoAcceptCallback = null;
 let debugCallback = null;
 let errorCallback = null;
@@ -540,13 +540,29 @@ function checkAndNotify(html) {
 
     // Auto-accept commands — runs independently of Telegram
     if (hasButtons && buttons.length > 0 && Config.getConfig('autoAcceptCommands')) {
-        const acceptPatterns = /^(run|accept|allow once|allow this conversation|always allow|yes|continue|approve|confirm|ok|allow|proceed)$/i;
-        const btnLabels = buttons.map(b => b.label).join(', ');
+        // Reject patterns — never auto-click these (they change permanent permissions)
+        const rejectPatterns = /^(always run|always allow|ask every time)$/i;
+        // Accept patterns — prefer exact matches for safer options
+        const acceptPatterns = /^(run|accept|allow once|allow this conversation|yes|continue|approve|confirm|ok|allow|proceed)$/i;
+
+        // Filter out reject buttons first
+        const safeButtons = buttons.filter(b => !rejectPatterns.test(b.label));
+        const btnLabels = safeButtons.map(b => b.label).join(', ');
         if (debugCallback) debugCallback(`Buttons found: [${btnLabels}]`);
-        const acceptBtn = buttons.find(b => acceptPatterns.test(b.label));
-        if (acceptBtn && acceptBtn.xpath !== lastAutoAcceptXpath) {
-            lastAutoAcceptXpath = acceptBtn.xpath;
+
+        // Find all accept buttons (there may be multiple for simultaneous commands)
+        const acceptBtns = safeButtons.filter(b => acceptPatterns.test(b.label));
+
+        for (const acceptBtn of acceptBtns) {
+            if (recentlyClickedXpaths.has(acceptBtn.xpath)) {
+                if (debugCallback) debugCallback(`Skip: already clicked "${acceptBtn.label}"`);
+                continue;
+            }
+            recentlyClickedXpaths.add(acceptBtn.xpath);
             if (debugCallback) debugCallback(`Auto-clicking: "${acceptBtn.label}"`);
+
+            // Use increasing delays for simultaneous buttons to avoid race conditions
+            const delay = 500 + (acceptBtns.indexOf(acceptBtn) * 800);
             setTimeout(async () => {
                 try {
                     const result = await clickElementByXPath(acceptBtn.xpath);
@@ -558,14 +574,16 @@ function checkAndNotify(html) {
                 } catch (e) {
                     if (debugCallback) debugCallback(`Click error: ${e.message}`);
                 }
-            }, 500);
-        } else if (acceptBtn) {
-            if (debugCallback) debugCallback(`Skip: same xpath already clicked`);
-        } else {
+                // Clean up after 10 seconds so future same buttons can be clicked
+                setTimeout(() => recentlyClickedXpaths.delete(acceptBtn.xpath), 10000);
+            }, delay);
+        }
+
+        if (acceptBtns.length === 0) {
             if (debugCallback) debugCallback(`No accept button matched in: [${btnLabels}]`);
         }
     }
-    if (!hasButtons) lastAutoAcceptXpath = null;
+    if (!hasButtons) recentlyClickedXpaths.clear();
 
     // --- Detect agent activity via text content changes (ignore dynamic HTML attrs) ---
     const textForCompare = text.slice(-500); // last 500 chars of text content to detect changes

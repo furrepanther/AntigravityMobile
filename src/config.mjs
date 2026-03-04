@@ -10,7 +10,8 @@ import { fileURLToPath } from 'url';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_FILE = join(__dirname, 'data', 'config.json');
+const PROJECT_ROOT = join(__dirname, '..');
+const CONFIG_FILE = join(PROJECT_ROOT, 'data', 'config.json');
 
 const DEFAULT_CONFIG = {
     server: {
@@ -51,6 +52,17 @@ const DEFAULT_CONFIG = {
     autoAcceptCommands: false,
     tunnel: {
         autoStart: false
+    },
+    supervisor: {
+        enabled: false,
+        provider: 'ollama',
+        endpoint: 'http://localhost:11434',
+        model: 'llama3',
+        projectContext: '',
+        showAssistTab: false,
+        maxActionsPerMinute: 10,
+        errorRecovery: { enabled: true, maxRetries: 3 },
+        projectRoot: ''
     }
 };
 
@@ -76,7 +88,7 @@ function deepMerge(target, source) {
  * Load config from disk, merging with defaults for any missing keys
  */
 export function loadConfig() {
-    const dataDir = join(__dirname, 'data');
+    const dataDir = join(PROJECT_ROOT, 'data');
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 
     if (existsSync(CONFIG_FILE)) {
@@ -102,7 +114,7 @@ export function loadConfig() {
  * Save current config to disk
  */
 export function saveConfig() {
-    const dataDir = join(__dirname, 'data');
+    const dataDir = join(PROJECT_ROOT, 'data');
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 
     try {
