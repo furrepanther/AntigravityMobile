@@ -62,14 +62,16 @@ To stop: run `Stop-Antigravity-Mobile.bat` (Windows) or `./Stop-Antigravity-Mobi
 
 | Component | Description |
 |-----------|-------------|
-| `http-server.mjs` | Express server, API endpoints, WebSocket bridge |
-| `chat-stream.mjs` | CDP-based chat capture, auto-accept, notification triggers |
-| `cdp-client.mjs` | Chrome DevTools Protocol client (screenshots, input injection, DOM queries) |
-| `telegram-bot.mjs` | Telegram Bot API — sends alerts for agent events |
-| `tunnel.mjs` | Cloudflare quick tunnel management (start/stop/status) |
-| `config.mjs` | Persistent JSON config store |
-| `quota-service.mjs` | Language server quota polling (Windows only) |
-| `launcher.mjs` | Orchestrates startup: server, CDP, Antigravity launch |
+| `src/http-server.mjs` | Express server, API endpoints, WebSocket bridge |
+| `src/chat-stream.mjs` | CDP-based chat capture, auto-accept, notification triggers |
+| `src/cdp-client.mjs` | Chrome DevTools Protocol client (screenshots, input injection, DOM queries) |
+| `src/supervisor-service.mjs` | AI supervisor — autonomous monitoring, error recovery, task queue, assist chat |
+| `src/ollama-client.mjs` | Thin wrapper around the Ollama REST API |
+| `src/telegram-bot.mjs` | Telegram Bot API — sends alerts for agent events |
+| `src/tunnel.mjs` | Cloudflare quick tunnel management (start/stop/status) |
+| `src/config.mjs` | Persistent JSON config store |
+| `src/quota-service.mjs` | Language server quota polling (Windows only) |
+| `src/launcher.mjs` | Orchestrates startup: server, CDP, Antigravity launch |
 
 ## Configuration
 
@@ -117,19 +119,50 @@ antigravity --remote-debugging-port=9222
 
 ```
 ├── public/
-│   ├── index.html          # Mobile dashboard
-│   ├── minimal.html        # Lite mode (chat only)
-│   └── admin.html          # Admin panel
-├── http-server.mjs         # API server
-├── chat-stream.mjs         # Chat streaming + auto-accept + notifications
-├── cdp-client.mjs          # CDP client
-├── telegram-bot.mjs        # Telegram integration
-├── tunnel.mjs              # Cloudflare tunnel manager
-├── config.mjs              # Config store
-├── quota-service.mjs       # Quota monitor
-├── launcher.mjs            # Startup orchestrator
-├── Start-Antigravity-Mobile.bat / .sh
-└── Stop-Antigravity-Mobile.bat / .sh
+│   ├── index.html              # Mobile dashboard
+│   ├── minimal.html            # Lite mode (chat only)
+│   ├── admin.html              # Admin panel
+│   ├── manifest.json           # PWA manifest
+│   ├── sw.js                   # Service worker
+│   ├── css/
+│   │   ├── variables.css       # CSS custom properties & theme variables
+│   │   ├── layout.css          # Page layout, topbar, panels
+│   │   ├── components.css      # Buttons, cards, forms, modals
+│   │   ├── themes.css          # Theme overrides (dark, light, pastel, rainbow, slate)
+│   │   ├── chat.css            # Chat message styling
+│   │   ├── files.css           # File browser styling
+│   │   ├── settings.css        # Settings panel styling
+│   │   └── assist.css          # Supervisor assist tab styling
+│   └── js/
+│       ├── app.js              # App initialization
+│       ├── api.js              # API client helpers
+│       ├── websocket.js        # WebSocket connection manager
+│       ├── navigation.js       # Tab navigation & routing
+│       ├── chat.js             # Chat rendering & history
+│       ├── chat-live.js        # Live chat streaming
+│       ├── files.js            # File browser & syntax highlighting
+│       ├── settings.js         # Settings panel logic
+│       ├── theme.js            # Theme switching
+│       ├── icons.js            # SVG icon helper
+│       ├── assist.js           # Supervisor assist chat
+│       └── task-queue.js       # Task queue UI
+├── src/
+│   ├── http-server.mjs         # API server & WebSocket bridge
+│   ├── chat-stream.mjs         # Chat streaming + auto-accept + notifications
+│   ├── cdp-client.mjs          # CDP client
+│   ├── supervisor-service.mjs  # AI supervisor (Ollama-powered)
+│   ├── ollama-client.mjs       # Ollama REST API wrapper
+│   ├── telegram-bot.mjs        # Telegram integration
+│   ├── tunnel.mjs              # Cloudflare tunnel manager
+│   ├── config.mjs              # Config store
+│   ├── quota-service.mjs       # Quota monitor
+│   └── launcher.mjs            # Startup orchestrator
+├── scripts/
+│   ├── Start-Antigravity-Mobile.bat / .sh
+│   └── Stop-Antigravity-Mobile.bat / .sh
+├── data/                       # Runtime config & session data (gitignored)
+├── screenshots/                # App screenshots for README
+└── uploads/                    # User uploads (screenshots, etc.)
 ```
 
 ## Troubleshooting

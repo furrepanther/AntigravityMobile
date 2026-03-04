@@ -1357,6 +1357,13 @@
                                     style="width: 120px;">
                                 <span class="form-hint">Rate limit to prevent runaway loops</span>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label">Context Window (tokens)</label>
+                                <input class="input" type="number" id="supervisorContextWindow" min="2048" max="131072"
+                                    value="8192" step="1024" style="width: 160px;">
+                                <span class="form-hint">num_ctx for Ollama — higher = more context but more VRAM
+                                    (default: 8192)</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2442,6 +2449,7 @@
                 document.getElementById('supervisorEndpoint').value = data.config?.endpoint || 'http://localhost:11434';
                 document.getElementById('supervisorModel').value = data.config?.model || 'llama3';
                 document.getElementById('supervisorRateLimit').value = data.config?.maxActionsPerMinute || 10;
+                document.getElementById('supervisorContextWindow').value = data.config?.contextWindow || 8192;
                 document.getElementById('supervisorContext').value = data.config?.projectContext || '';
                 document.getElementById('supervisorStatEnabled').textContent = data.enabled ? 'Active' : 'Off';
                 document.getElementById('supervisorStatEnabled').className = 'stat-value ' + (data.enabled ? 'ok' : '');
@@ -2485,6 +2493,7 @@
                         endpoint: document.getElementById('supervisorEndpoint').value,
                         model: document.getElementById('supervisorModel').value,
                         maxActionsPerMinute: document.getElementById('supervisorRateLimit').value,
+                        contextWindow: document.getElementById('supervisorContextWindow').value,
                         disableInjects: document.getElementById('supervisorDisableInjects').checked,
                         projectContext: document.getElementById('supervisorContext').value
                     })

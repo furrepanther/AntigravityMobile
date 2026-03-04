@@ -104,12 +104,14 @@ export async function chat(messages, model, options = {}) {
  * @param {function(string): void} onToken - Called with each text chunk
  * @returns {{ success: boolean, response?: string, error?: string }}
  */
-export async function chatStream(messages, model, onToken) {
+export async function chatStream(messages, model, onToken, options = {}) {
     try {
+        const body = { model, messages, stream: true };
+        if (options.num_ctx) body.options = { num_ctx: options.num_ctx };
         const res = await fetch(`${endpoint}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model, messages, stream: true }),
+            body: JSON.stringify(body),
             signal: AbortSignal.timeout(300000) // 5 min for streaming
         });
 

@@ -400,7 +400,7 @@ export async function processChatUpdate(chatHtml) {
 
         // Call Ollama
         Ollama.setEndpoint(config.endpoint || 'http://localhost:11434');
-        const result = await Ollama.chat(messages, config.model || 'llama3');
+        const result = await Ollama.chat(messages, config.model || 'llama3', { num_ctx: config.contextWindow || 8192 });
 
         if (!result.success) {
             supervisorStatus = 'error';
@@ -535,7 +535,12 @@ export async function processFileReads(text) {
         const filePath = match[1].trim();
         const result = readProjectFile(filePath);
         if (result.success) {
-            modified = modified.replace(match[0], '\n```\n// ' + filePath + '\n' + result.content.slice(0, 5000) + '\n```\n');
+            const content = result.content;
+            const MAX_DISPLAY = 10000;
+            const truncated = content.length > MAX_DISPLAY;
+            const display = truncated ? content.slice(0, MAX_DISPLAY) : content;
+            const notice = truncated ? '\n\n... truncated (' + Math.round(content.length / 1024) + 'KB total, showing first ' + MAX_DISPLAY + ' chars)' : '';
+            modified = modified.replace(match[0], '\n```\n// ' + filePath + '\n' + display + notice + '\n```\n');
         } else {
             modified = modified.replace(match[0], '\n[File error: ' + result.error + ']\n');
         }
@@ -665,13 +670,16 @@ You can read project files! If the user asks about a file, include \`[READ:path/
 **IMPORTANT:** Do NOT guess, fabricate, or hallucinate file contents. If you include a [READ:] or [LIST:] tag, do NOT write any summary or description of the file — the system will replace the tag with real content. Only describe file contents if they are provided to you below in "Pre-loaded File Contents".
 ${preReadContent ? `\n## Pre-loaded File Contents\nThe following files were pre-loaded based on the user's request. Use this ACTUAL content to answer their question:\n${preReadContent}` : ''}`;
 
+    // Build context with smart history management
+    const contextMessages = await buildSmartHistory(userChatHistory, config);
+
     const messages = [
         { role: 'system', content: systemPrompt },
-        ...userChatHistory.slice(-20).map(m => ({ role: m.role, content: m.content }))
+        ...contextMessages
     ];
 
     try {
-        const result = await Ollama.chatStream(messages, config.model || 'llama3', onToken);
+        const result = await Ollama.chatStream(messages, config.model || 'llama3', onToken, { num_ctx: config.contextWindow || 8192 });
         if (!result.success) {
             return { success: false, error: result.error };
         }
@@ -707,7 +715,7 @@ function preReadFilesFromMessage(message) {
         if (pattern.test(lower)) {
             const result = readProjectFile(path);
             if (result.success) {
-                results.push(`### ${path}\n\`\`\`\n${result.content.slice(0, 5000)}\n\`\`\``);
+                results.push(`### ${path}\n\`\`\`\n${result.content.slice(0, 2000)}\n\`\`\``);
             }
         }
     }
@@ -718,7 +726,7 @@ function preReadFilesFromMessage(message) {
         const filePath = pathMatch[1];
         const result = readProjectFile(filePath);
         if (result.success && !results.some(r => r.includes(`### ${filePath}`))) {
-            results.push(`### ${filePath}\n\`\`\`\n${result.content.slice(0, 5000)}\n\`\`\``);
+            results.push(`### ${filePath}\n\`\`\`\n${result.content.slice(0, 2000)}\n\`\`\``);
         }
     }
 
@@ -732,6 +740,66 @@ function preReadFilesFromMessage(message) {
     }
 
     return results.join('\n\n');
+}
+
+// Track conversation summary for smart history management
+let chatHistorySummary = '';
+let lastSummarizedCount = 0;
+
+/**
+ * Build smart conversation history: summarize older messages, keep recent ones.
+ * When history grows beyond SUMMARIZE_THRESHOLD, older messages are condensed
+ * into a summary to preserve context without consuming too many tokens.
+ */
+async function buildSmartHistory(history, config) {
+    const SUMMARIZE_THRESHOLD = 15;
+    const KEEP_RECENT = 8;
+
+    if (history.length <= SUMMARIZE_THRESHOLD) {
+        // Short history — use all messages directly
+        return history.map(m => ({ role: m.role, content: m.content }));
+    }
+
+    // Need to summarize older messages
+    const olderMessages = history.slice(0, -KEEP_RECENT);
+    const recentMessages = history.slice(-KEEP_RECENT);
+
+    // Only re-summarize if new messages have been added to the older set
+    if (olderMessages.length > lastSummarizedCount) {
+        try {
+            const toSummarize = olderMessages.map(m =>
+                (m.role === 'user' ? 'User' : 'Supervisor') + ': ' + m.content.slice(0, 300)
+            ).join('\n');
+
+            const summaryResult = await Ollama.chat([
+                { role: 'system', content: `Summarize this conversation concisely. Preserve: key topics discussed, important decisions, file names mentioned, errors encountered, and any user preferences expressed. Keep it under 500 words.\n\nConversation:\n${toSummarize}` }
+            ], config.model || 'llama3', { num_ctx: config.contextWindow || 8192 });
+
+            if (summaryResult.success && summaryResult.response) {
+                chatHistorySummary = summaryResult.response;
+                lastSummarizedCount = olderMessages.length;
+            }
+        } catch (e) {
+            // If summarization fails, just use recent messages
+            console.log('[Supervisor] History summarization failed:', e.message);
+        }
+    }
+
+    // Build context: summary as a system-like message + recent messages
+    const contextMessages = [];
+    if (chatHistorySummary) {
+        contextMessages.push({
+            role: 'user',
+            content: '[Previous conversation summary]\n' + chatHistorySummary
+        });
+        contextMessages.push({
+            role: 'assistant',
+            content: 'Understood, I have context from our previous conversation. How can I help?'
+        });
+    }
+    contextMessages.push(...recentMessages.map(m => ({ role: m.role, content: m.content })));
+
+    return contextMessages;
 }
 
 // ============================================================================
@@ -807,7 +875,8 @@ If you cannot fix it, respond: {"fix": null, "explanation": "why it cannot be au
 
     const result = await Ollama.chat(
         [{ role: 'system', content: recoveryPrompt }],
-        config.model || 'llama3'
+        config.model || 'llama3',
+        { num_ctx: config.contextWindow || 8192 }
     );
 
     if (!result.success) return { attempted: true, success: false, error: result.error };
@@ -889,7 +958,8 @@ Is this task COMPLETE based on the agent output? Respond with only: {"complete":
 
     const result = await Ollama.chat(
         [{ role: 'system', content: checkPrompt }],
-        config.model || 'llama3'
+        config.model || 'llama3',
+        { num_ctx: config.contextWindow || 8192 }
     );
 
     if (result.success) {

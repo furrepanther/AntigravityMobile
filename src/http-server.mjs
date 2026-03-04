@@ -972,13 +972,14 @@ app.get('/api/admin/supervisor', localhostOnly, async (req, res) => {
 
 // Save supervisor config
 app.post('/api/admin/supervisor', localhostOnly, (req, res) => {
-    const { endpoint, model, maxActionsPerMinute, projectContext, disableInjects } = req.body;
+    const { endpoint, model, maxActionsPerMinute, projectContext, disableInjects, contextWindow } = req.body;
     const updates = {};
     if (endpoint !== undefined) updates.endpoint = endpoint;
     if (model !== undefined) updates.model = model;
     if (maxActionsPerMinute !== undefined) updates.maxActionsPerMinute = parseInt(maxActionsPerMinute) || 10;
     if (projectContext !== undefined) updates.projectContext = projectContext;
     if (disableInjects !== undefined) updates.disableInjects = !!disableInjects;
+    if (contextWindow !== undefined) updates.contextWindow = parseInt(contextWindow) || 8192;
     const current = Config.getConfig('supervisor') || {};
     Config.updateConfig('supervisor', { ...current, ...updates });
     emitEvent('config', 'Supervisor config saved');
