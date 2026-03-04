@@ -3,13 +3,7 @@
 Mobile dashboard and admin panel for [Antigravity IDE](https://antigravity.google). Monitor conversations, manage your agent, and get notified — all from your phone.
 
 <p align="center">
-  <img src="screenshots/screenshot01.png" width="200" alt="Dashboard" style="border:1px solid #30363d;border-radius:8px;" />
-  <img src="screenshots/screenshot02.png" width="200" alt="Chat View" style="border:1px solid #30363d;border-radius:8px;" />
-  <img src="screenshots/screenshot03.png" width="200" alt="Admin Panel" style="border:1px solid #30363d;border-radius:8px;" />
-</p>
-
-<p align="center">
-  <img src="screenshots/screenshot04.png" width="620" alt="Admin Panel Landscape" style="border:1px solid #30363d;border-radius:8px;" />
+  <img src="screenshots/screenshot.png" width="620" alt="Admin Panel Landscape" style="border:1px solid #30363d;border-radius:8px;" />
 </p>
 
 ## Features
