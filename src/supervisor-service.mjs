@@ -35,6 +35,10 @@ let recoveryAttempts = {};         // { errorHash: { count, lastAttempt } }
 // Feature 3: Task Queue
 let taskQueue = [];                // [{ instruction, status, addedAt, startedAt, completedAt }]
 
+// Feature 6: Suggest Mode — queue actions for human approval
+let suggestQueue = [];             // [{ id, action, buttons, timestamp, status }]
+let suggestIdCounter = 1;
+
 // Feature 5: Session Intelligence
 let sessionStartTime = Date.now();
 let sessionStats = { messagesProcessed: 0, actionsExecuted: 0, errorsDetected: 0, errorsFixed: 0 };
@@ -257,6 +261,7 @@ function areInjectsDisabled() {
 
 /**
  * Execute a parsed action
+ * In suggestMode, inject/click actions are queued for human approval
  */
 async function executeAction(action, buttons) {
     if (action.action === 'none') {
@@ -270,10 +275,39 @@ async function executeAction(action, buttons) {
         return;
     }
 
-    // Block inject/click when injects are disabled (supervisor still monitors + chats)
     const config = Config.getConfig('supervisor') || {};
+
+    // Block inject/click when injects are disabled
     if (config.disableInjects && (action.action === 'inject' || action.action === 'click')) {
         logAction(action, 'blocked: injects disabled');
+        return;
+    }
+
+    // SUGGEST MODE: queue inject/click for approval instead of executing
+    if (config.suggestMode && (action.action === 'inject' || action.action === 'click')) {
+        const suggestion = {
+            id: suggestIdCounter++,
+            action,
+            buttons,
+            timestamp: new Date().toISOString(),
+            status: 'pending',
+            reason: action.reason || ''
+        };
+        suggestQueue.push(suggestion);
+        // Keep queue manageable
+        if (suggestQueue.length > 20) suggestQueue.shift();
+
+        logAction(action, 'queued for approval');
+        if (broadcastFn) broadcastFn('supervisor_suggestion', suggestion);
+        if (emitEventFn) emitEventFn('supervisor', `💡 Suggestion queued: ${action.action} — "${(action.text || action.button || '').slice(0, 60)}"`);
+
+        // Also send Telegram notification if available
+        if (TelegramBot.isRunning()) {
+            try {
+                const desc = action.action === 'inject' ? action.text : `Click: ${action.button}`;
+                await TelegramBot.sendNotification('info', `💡 Supervisor suggests: ${desc?.slice(0, 100)}`);
+            } catch (e) { /* ignore */ }
+        }
         return;
     }
 
@@ -294,7 +328,6 @@ async function executeAction(action, buttons) {
 
         case 'click': {
             if (!action.button || !clickByXPathFn) break;
-            // Find the button by label match
             const btn = buttons.find(b =>
                 b.label.toLowerCase().includes(action.button.toLowerCase()) ||
                 action.button.toLowerCase().includes(b.label.toLowerCase())
@@ -342,6 +375,64 @@ async function executeAction(action, buttons) {
         default:
             logAction(action, 'unknown action');
     }
+}
+
+/**
+ * Get pending suggestions (for mobile UI)
+ */
+export function getPendingSuggestions() {
+    return suggestQueue.filter(s => s.status === 'pending');
+}
+
+/**
+ * Approve a suggestion — execute the queued action
+ */
+export async function approveSuggestion(id) {
+    const suggestion = suggestQueue.find(s => s.id === id && s.status === 'pending');
+    if (!suggestion) return { success: false, error: 'Suggestion not found or already processed' };
+
+    suggestion.status = 'approved';
+    recordAction();
+
+    // Execute the original action (bypass suggest mode)
+    const { action, buttons } = suggestion;
+    try {
+        if (action.action === 'inject' && action.text && injectAndSubmitFn) {
+            await injectAndSubmitFn(action.text);
+            logAction(action, 'approved + injected');
+            if (emitEventFn) emitEventFn('supervisor', `✅ Approved: "${action.text.slice(0, 80)}"`);
+        } else if (action.action === 'click' && action.button && clickByXPathFn) {
+            const btn = (buttons || []).find(b =>
+                b.label.toLowerCase().includes(action.button.toLowerCase()) ||
+                action.button.toLowerCase().includes(b.label.toLowerCase())
+            );
+            if (btn) {
+                await clickByXPathFn(btn.xpath);
+                logAction(action, `approved + clicked: ${btn.label}`);
+                if (emitEventFn) emitEventFn('supervisor', `✅ Approved click: "${btn.label}"`);
+            }
+        }
+    } catch (e) {
+        logAction(action, `approve error: ${e.message}`);
+        return { success: false, error: e.message };
+    }
+
+    if (broadcastFn) broadcastFn('supervisor_suggestion_resolved', { id, status: 'approved' });
+    return { success: true };
+}
+
+/**
+ * Dismiss a suggestion — discard without executing
+ */
+export function dismissSuggestion(id) {
+    const suggestion = suggestQueue.find(s => s.id === id && s.status === 'pending');
+    if (!suggestion) return { success: false, error: 'Suggestion not found or already processed' };
+
+    suggestion.status = 'dismissed';
+    logAction(suggestion.action, 'dismissed by user');
+    if (emitEventFn) emitEventFn('supervisor', `❌ Dismissed: "${(suggestion.action.text || suggestion.action.button || '').slice(0, 60)}"`);
+    if (broadcastFn) broadcastFn('supervisor_suggestion_resolved', { id, status: 'dismissed' });
+    return { success: true };
 }
 
 /**

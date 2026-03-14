@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CDP Client - Chrome DevTools Protocol interface for Antigravity
  * 
  * Provides:
@@ -7,7 +7,8 @@
  * - Page inspection
  */
 
-let cdpPort = 9222;
+let cdpPort = 9333;
+let preferredWorkspace = null;
 
 function getCdpUrl() {
     return `http://localhost:${cdpPort}`;
@@ -17,7 +18,7 @@ function getCdpUrl() {
  * Set the active CDP device port
  */
 export function setActiveDevice(port) {
-    cdpPort = parseInt(port) || 9222;
+    cdpPort = parseInt(port) || 9333;
 }
 
 /**
@@ -25,6 +26,22 @@ export function setActiveDevice(port) {
  */
 export function getActiveDevice() {
     return cdpPort;
+}
+
+/**
+ * Set the preferred workspace name for targeting
+ * When set, findEditorTarget() will prefer windows whose title starts with this name
+ */
+export function setPreferredWorkspace(name) {
+    preferredWorkspace = name || null;
+    if (name) console.log(`🎯 CDP workspace preference set: "${name}"`);
+}
+
+/**
+ * Get the current preferred workspace
+ */
+export function getPreferredWorkspace() {
+    return preferredWorkspace;
 }
 
 /**
@@ -45,19 +62,35 @@ export async function getVersion() {
 
 /**
  * Find the main Antigravity editor page
+ * If preferredWorkspace is set, targets the window whose title starts with that name
  */
 export async function findEditorTarget() {
     const targets = await getTargets();
-
-    // Look for the main editor window (not launchpad, not devtools)
-    const editor = targets.find(t =>
+    const pages = targets.filter(t =>
         t.type === 'page' &&
-        t.title.includes('Antigravity') &&
-        !t.title.includes('Launchpad') &&
         !t.url.includes('devtools')
     );
 
-    return editor || targets.find(t => t.type === 'page');
+    // 1. If preferred workspace is configured, find exact match by title prefix
+    if (preferredWorkspace) {
+        const preferred = pages.find(t =>
+            t.title.toLowerCase().startsWith(preferredWorkspace.toLowerCase() + ' ') ||
+            t.title.toLowerCase().startsWith(preferredWorkspace.toLowerCase() + ' —') ||
+            t.title.toLowerCase() === preferredWorkspace.toLowerCase()
+        );
+        if (preferred) return preferred;
+        // Log warning but don't fail — fall through to default behavior
+        console.log(`⚠️ Preferred workspace "${preferredWorkspace}" not found among ${pages.length} targets`);
+    }
+
+    // 2. Fallback: find Antigravity page (excluding Launchpad/Manager)
+    const editor = pages.find(t =>
+        t.title.includes('Antigravity') &&
+        !t.title.includes('Launchpad') &&
+        !t.title.includes('Manager')
+    );
+
+    return editor || pages.find(t => t.type === 'page');
 }
 
 /**
@@ -545,9 +578,9 @@ export async function getWorkspacePath() {
 
     console.log(`[CDP getWorkspacePath] Target title: "${target.title}"`);
 
-    // Extract project name from title: "ProjectName - Antigravity - filename"
-    const titleMatch = target.title.match(/^([^-]+)\s*-\s*Antigravity/);
-    const projectName = titleMatch ? titleMatch[1].trim() : null;
+    // Extract project name from title: "ProjectName — filename" or "ProjectName - Antigravity - filename"
+    const titleMatch = target.title.match(/^([^\u2014-]+)\s*[\u2014-]/);
+    const projectName = titleMatch ? titleMatch[1].trim() : (preferredWorkspace || null);
     console.log(`[CDP getWorkspacePath] Extracted project name: "${projectName}"`);
 
     const client = await connectToTarget(target);

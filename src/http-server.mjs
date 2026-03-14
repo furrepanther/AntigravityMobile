@@ -398,6 +398,12 @@ loadMessages();
 Config.loadConfig();
 const serverStartTime = Date.now();
 
+// Set workspace targeting from config
+const targetWorkspace = Config.getConfig('server.targetWorkspace');
+if (targetWorkspace) {
+    CDP.setPreferredWorkspace(targetWorkspace);
+}
+
 // ============================================================================
 // WebSocket Clients
 // ============================================================================
@@ -776,8 +782,8 @@ app.delete('/api/admin/devices/:port', localhostOnly, (req, res) => {
     devices = devices.filter(d => d.cdpPort !== port);
 
     if (devices.length === 0) {
-        devices = [{ name: 'Default', cdpPort: 9222, active: true }];
-        CDP.setActiveDevice(9222);
+        devices = [{ name: 'Default', cdpPort: 9333, active: true }];
+        CDP.setActiveDevice(9333);
     } else if (wasActive) {
         devices[0].active = true;
         CDP.setActiveDevice(devices[0].cdpPort);
@@ -1103,6 +1109,29 @@ app.delete('/api/supervisor/queue/:index', (req, res) => {
 
 app.delete('/api/supervisor/queue', (req, res) => {
     res.json(Supervisor.clearTaskQueue());
+});
+
+// ============================================================================
+// Supervisor Suggest Mode API (Feature 6)
+// ============================================================================
+
+// Get pending suggestions
+app.get('/api/supervisor/suggestions', (req, res) => {
+    res.json({ suggestions: Supervisor.getPendingSuggestions() });
+});
+
+// Approve a suggestion
+app.post('/api/supervisor/suggestions/:id/approve', async (req, res) => {
+    const id = parseInt(req.params.id);
+    const result = await Supervisor.approveSuggestion(id);
+    res.json(result);
+});
+
+// Dismiss a suggestion
+app.post('/api/supervisor/suggestions/:id/dismiss', (req, res) => {
+    const id = parseInt(req.params.id);
+    const result = Supervisor.dismissSuggestion(id);
+    res.json(result);
 });
 
 // ============================================================================
@@ -1609,6 +1638,11 @@ app.post('/api/workspace', (req, res) => {
     const { path } = req.body;
     if (path && existsSync(path)) {
         workspacePath = path;
+        Supervisor.setProjectRoot(workspacePath);
+        broadcast('workspace_changed', {
+            path: workspacePath,
+            projectName: basename(workspacePath)
+        });
         res.json({ success: true, workspace: workspacePath });
     } else {
         res.status(400).json({ error: 'Invalid path' });
@@ -1617,7 +1651,30 @@ app.post('/api/workspace', (req, res) => {
 
 // Get current workspace
 app.get('/api/workspace', (req, res) => {
-    res.json({ workspace: workspacePath });
+    const targetWorkspace = Config.getConfig('server.targetWorkspace');
+    res.json({
+        workspace: workspacePath,
+        targetWorkspace: targetWorkspace || null,
+        projectName: basename(workspacePath)
+    });
+});
+
+// Reset file browser to workspace root (e.g., after getting stuck in a subfolder)
+app.post('/api/workspace/reset', async (req, res) => {
+    try {
+        const detectedPath = await CDP.getWorkspacePath();
+        if (detectedPath) {
+            workspacePath = detectedPath;
+            Supervisor.setProjectRoot(workspacePath);
+            broadcast('workspace_changed', {
+                path: workspacePath,
+                projectName: basename(workspacePath)
+            });
+        }
+        res.json({ success: true, workspace: workspacePath });
+    } catch (e) {
+        res.json({ success: false, workspace: workspacePath, error: e.message });
+    }
 });
 
 // List files in directory
