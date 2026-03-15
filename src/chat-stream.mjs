@@ -10,7 +10,7 @@
 import WebSocket from 'ws';
 import * as TelegramBot from './telegram-bot.mjs';
 import * as Config from './config.mjs';
-import { clickElementByXPath } from './cdp-client.mjs';
+import { clickElementByXPath, getPreferredWorkspace } from './cdp-client.mjs';
 
 // Notification state tracker (avoids duplicate alerts)
 let lastNotifState = { inputNeeded: false, error: false, dialogError: false };
@@ -26,7 +26,7 @@ export function setAutoAcceptCallback(cb) { autoAcceptCallback = cb; }
 export function setDebugCallback(cb) { debugCallback = cb; }
 export function setErrorCallback(cb) { errorCallback = cb; }
 
-const CDP_PORTS = [9222, 9000, 9001, 9002, 9003];
+const CDP_PORTS = [9333, 9000, 9001, 9002, 9003];
 
 // State
 let connection = null;
@@ -48,9 +48,11 @@ function hashString(str) {
 
 /**
  * Find CDP workbench targets
+ * If a preferred workspace is configured, filters to that workspace's window
  */
 async function findTargets() {
     const targets = [];
+    const preferred = getPreferredWorkspace();
 
     for (const port of CDP_PORTS) {
         try {
@@ -68,6 +70,20 @@ async function findTargets() {
 
             workbenches.forEach(t => targets.push({ ...t, port }));
         } catch (e) { /* port not available */ }
+    }
+
+    // If preferred workspace is set, filter to matching targets
+    if (preferred && targets.length > 0) {
+        const preferredTargets = targets.filter(t =>
+            t.title?.toLowerCase().startsWith(preferred.toLowerCase() + ' ') ||
+            t.title?.toLowerCase().startsWith(preferred.toLowerCase() + ' —') ||
+            t.title?.toLowerCase() === preferred.toLowerCase()
+        );
+        if (preferredTargets.length > 0) {
+            console.log(`🎯 Chat stream targeting workspace "${preferred}" (${preferredTargets.length} targets)`);
+            return preferredTargets;
+        }
+        console.log(`⚠️ Preferred workspace "${preferred}" not found in chat targets, using all ${targets.length}`);
     }
 
     return targets;
