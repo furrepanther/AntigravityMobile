@@ -26,7 +26,7 @@ export function setAutoAcceptCallback(cb) { autoAcceptCallback = cb; }
 export function setDebugCallback(cb) { debugCallback = cb; }
 export function setErrorCallback(cb) { errorCallback = cb; }
 
-const CDP_PORTS = [9333, 9000, 9001, 9002, 9003];
+const CDP_PORTS = [9222, 9333, 9000, 9001, 9002, 9003];
 
 // State
 let connection = null;
